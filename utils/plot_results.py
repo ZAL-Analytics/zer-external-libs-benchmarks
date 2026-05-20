@@ -55,32 +55,19 @@ import matplotlib.ticker as mticker
 # ── Visual style ───────────────────────────────────────────────────────────────
 # Pastel fills (ACM-paper style) + darker saturated borders of the same hue.
 
-_LIBRARY_PALETTE = {
-    "zer":                  "#A8C8F0",  # pastel blue
-    "zer+judge_cpu":        "#98B8E0",  # pastel blue-indigo
-    "zer+judge_cuda":       "#88A8D0",  # pastel indigo
-    "zer+judge_tensorrt":   "#7898C0",  # pastel deep indigo
-    "splink":               "#F5AAAA",  # pastel red
-    "jellyfish":            "#A0DCF0",  # pastel cyan
+_KNOWN_FILL = {
+    "zer":    "#A8C8F0",  # pastel blue
+    "splink": "#F5AAAA",  # pastel red
 }
-_LIBRARY_BORDER = {
-    "zer":                  "#1E88E5",
-    "zer+judge_cpu":        "#1565C0",
-    "zer+judge_cuda":       "#0D47A1",
-    "zer+judge_tensorrt":   "#003c8f",
-    "splink":               "#E53935",
-    "jellyfish":            "#00ACC1",
+_KNOWN_BORDER = {
+    "zer":    "#1E88E5",
+    "splink": "#E53935",
 }
-_FALLBACK_COLORS = [
-    "#A8C8F0", "#F5AAAA", "#A8DCA8", "#FDD0A0",
-    "#D4B0F0", "#A0DCF0", "#FFE080", "#C4A090",
-    "#90D0C8", "#F4B8D4",
-]
-_FALLBACK_BORDERS = [
-    "#1E88E5", "#E53935", "#43A047", "#FB8C00",
-    "#8E24AA", "#00ACC1", "#FFB300", "#6D4C41",
-    "#00897B", "#F06292",
-]
+
+
+def library_color(name, palette_name="tab10"):
+    """Return the base (border-weight) color for a library name."""
+    return _KNOWN_BORDER.get(name) or plt.get_cmap(palette_name)(hash(name) % 10)
 _MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*", "h", "<"]
 
 # Stage palette — fixed per concept so the same stage always has the same color across
@@ -161,21 +148,23 @@ def _save_fig(fig, out_dir: str, stem: str) -> None:
 
 
 def _color(lib: str, ordered_libs: list) -> str:
-    if lib in _LIBRARY_PALETTE:
-        return _LIBRARY_PALETTE[lib]
+    if lib in _KNOWN_FILL:
+        return _KNOWN_FILL[lib]
     if lib.startswith("zer"):
-        return _LIBRARY_PALETTE["zer"]
+        return _KNOWN_FILL["zer"]
     idx = ordered_libs.index(lib) if lib in ordered_libs else 0
-    return _FALLBACK_COLORS[idx % len(_FALLBACK_COLORS)]
+    c = plt.get_cmap("tab10")(idx % 10)
+    # Lighten the tab10 colour to match the pastel-fill style
+    return tuple(min(1.0, v * 0.5 + 0.5) for v in c[:3]) + (1.0,)
 
 
 def _border_color(lib: str, ordered_libs: list) -> str:
-    if lib in _LIBRARY_BORDER:
-        return _LIBRARY_BORDER[lib]
+    if lib in _KNOWN_BORDER:
+        return _KNOWN_BORDER[lib]
     if lib.startswith("zer"):
-        return _LIBRARY_BORDER["zer"]
+        return _KNOWN_BORDER["zer"]
     idx = ordered_libs.index(lib) if lib in ordered_libs else 0
-    return _FALLBACK_BORDERS[idx % len(_FALLBACK_BORDERS)]
+    return plt.get_cmap("tab10")(idx % 10)
 
 
 def _marker(lib: str, ordered_libs: list) -> str:
@@ -231,29 +220,14 @@ def _load_throughput_record(data: dict, path: str) -> dict:
     pipeline = data.get("pipeline", {})
     raw      = data.get("raw", {})
 
-    if pipeline:
-        # New common schema
-        block_ms      = pipeline.get("block_ms")
-        compare_ms    = pipeline.get("compare_ms")
-        em_ms         = pipeline.get("em_ms")
-        score_ms      = pipeline.get("score_ms")
-        judge_ms      = pipeline.get("judge_ms")
-        u_sample_ms   = pipeline.get("u_sample_ms", 0) or 0
-        total_ms      = pipeline.get("total_ms")
-    else:
-        # Old schema: map library-specific stage names to common pipeline names
-        stages     = data.get("stages", {})
-        block_ms   = stages.get("index_ms")
-        compare_ms = (stages.get("compare_ms") or stages.get("predict_ms")
-                      or stages.get("match_ms"))
-        em_ms      = stages.get("em_ms") or stages.get("classify_ms")
-        score_ms   = stages.get("score_ms")
-        judge_ms   = None
-        if lib == "splink":
-            total_ms = stages.get("predict_ms")
-        else:
-            total_ms = stages.get("total_ms")
-        u_sample_ms = 0
+    # Requires results produced after refactor (pipeline key required).
+    block_ms    = pipeline.get("block_ms")
+    compare_ms  = pipeline.get("compare_ms")
+    em_ms       = pipeline.get("em_ms")
+    score_ms    = pipeline.get("score_ms")
+    judge_ms    = pipeline.get("judge_ms")
+    u_sample_ms = pipeline.get("u_sample_ms", 0) or 0
+    total_ms    = pipeline.get("total_ms")
 
     thr = data.get("throughput", {})
     pairs_per_s = (thr.get("pairs_per_s") or thr.get("compare_pairs_per_s")

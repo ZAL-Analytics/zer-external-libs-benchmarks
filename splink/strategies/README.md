@@ -7,22 +7,23 @@ Per-scenario splink comparison and blocking configurations for the accuracy benc
 Each strategy module exposes a single `build()` function:
 
 ```python
-def build(toml_data: dict, dfs: list, link_type: str = "dedupe_only") \
-    -> tuple[list, list, str | None, str | None]:
+def build(dfs: list, link_type: str = "dedupe_only") \
+    -> tuple[list, list, str | None, str | None, dict]:
     ...
 ```
 
-Return value: `(comparisons, blocking_rules, em_col, surname_col)`
+Return value: `(comparisons, blocking_rules, em_col, surname_col, renames)`
 
 | Return value | Type | Description |
 |---|---|---|
-| `comparisons` | `list` | splink comparison objects (e.g. `LevenshteinAtThresholds`, `ExactMatch`) |
+| `comparisons` | `list` | splink comparison objects (e.g. `JaroWinklerAtThresholds`, `ExactMatch`) |
 | `blocking_rules` | `list` | splink `block_on(...)` rules |
 | `em_col` | `str \| None` | Column used for the first EM training pass (typically firstname) |
 | `surname_col` | `str \| None` | Column used for the second EM training pass (typically surname) |
+| `renames` | `dict` | Column renames applied to source B before passing frames to splink (used for cross-schema scenarios where field names differ between sources) |
 
-Returning `(None, None, None, None)` signals the calling `run.py` to fall back to heuristic
-auto-detection instead.
+Returning `(None, None, None, None, {})` signals the calling `run.py` to fall back to heuristic
+auto-detection via `build_fallback_comparisons()` instead.
 
 ## Registered scenarios
 
@@ -40,39 +41,40 @@ is omitted.
 | `brp_sis_link`, `micro_brp_sis_link` | `brp_sis_link.py` | BRP ↔ SIS link-only |
 | `brp_kvk_hks_link_and_dedupe` | `brp_kvk_hks_link_and_dedupe.py` | BRP + KvK + HKS link-and-dedupe |
 | `kvk_dedupe` | `kvk_dedupe.py` | KvK single-source deduplication |
-| _(any other slug)_ | `default.py` | Delegates to `utils.build_from_mapping()` |
+| _(any other slug)_ | `default.py` | Returns `(None, …)` → triggers heuristic fallback |
 
 ## default strategy
 
-`default.py` delegates directly to `utils.build_from_mapping()`, which reads `comparison_type`,
-`blocking_key`, and `role` annotations from `mapping.toml` to construct comparisons and blocking rules.
-When the TOML has no `comparison_type` annotations, `build_from_mapping()` returns `(None, None, None, None)`
-and the calling `run.py` applies keyword-based heuristic detection.
+`default.py` returns `(None, None, None, None, {})` unconditionally, signalling the calling `run.py`
+to fall back to `build_fallback_comparisons()` in `utils.py`. This is the path taken for any scenario
+slug that is not explicitly registered in `__init__.py`.
 
 ## Blocking key types
 
-The TOML-driven path supports two `blocking_key` values used by `utils.build_from_mapping()`:
+Per-scenario strategy modules pre-compute blocking key columns directly on the dataframes. Two
+standard blocking key columns are produced by the registered BRP/KvK/HKS/SIS strategies:
 
-| Value | Generated column | Logic |
-|---|---|---|
-| `soundex_initial_year` | `_bk_soundex_init_year` | `soundex(surname) + ":" + firstname[:1] + ":" + dob[:4]`. Falls back to `surname[:4]` when `jellyfish` is not installed. |
-| `year_month` | `_bk_dob_ym` | `dob[:7]` (YYYY-MM) |
+| Column | Logic |
+|---|---|
+| `_bk_soundex_init_year` | `soundex(surname) + ":" + firstname[:1] + ":" + dob[:4]`. Falls back to `surname[:4]` when `jellyfish` is not installed. |
+| `_bk_dob_ym` | `dob[:7]` (YYYY-MM) |
 
-For link modes (`link_only`, `link_and_dedupe`), `build_from_mapping()` additionally appends direct
-`block_on(surname_col)` and `block_on(dob_col)` rules to improve blocking recall across sources.
+The heuristic fallback (`build_fallback_comparisons()` in `utils.py`) generates the same two blocking
+key columns via `add_blocking_keys()` when the matching columns are present.
 
 ## Adding a new strategy
 
-1. Create `strategies/<slug>.py` with a `build(toml_data, dfs, link_type)` function.
+1. Create `strategies/<slug>.py` with a `build(dfs, link_type)` function.
 2. Import it in `strategies/__init__.py` and add a mapping in the `strategies` dict inside
    `strategy_for()`.
 
-Most scenarios can simply re-export `default.build`:
+Most new scenarios will need their own `build()` that hardcodes the schema's field names and blocking
+logic. Use `brp_dedupe.py` as a reference implementation. The minimum viable implementation is:
 
 ```python
-from .default import build
-__all__ = ["build"]
+def build(dfs, link_type="dedupe_only"):
+    return None, None, None, None, {}
 ```
 
-Add overrides only when the default TOML-driven logic needs scenario-specific adjustments (e.g.
-custom comparison thresholds, additional blocking rules, or field renames not covered by the TOML).
+which delegates entirely to `build_fallback_comparisons()`. Add explicit comparisons and blocking
+rules when keyword-based heuristic detection is insufficient for the schema.

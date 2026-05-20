@@ -1,16 +1,11 @@
-"""Splink accuracy strategy for brp_hks/link (and brp_kvk_hks/link_and_dedupe).
+"""Splink accuracy strategy for brp_hks/link (and brp_kvk_hks/link_and_dedupe, brp_sis/link).
 
-Root cause: the default build_from_mapping adds both a soundex_initial_year
-blocking key AND a year_month DOB key.  The year_month key is a loose OR
-rule that generates huge numbers of false candidate pairs (all records sharing
-a birth year-month).  HKS records contain ~11 % initials in voornamen, so
-Jaro-Winkler on first names cannot discriminate "J. Jansen" from any other
-"J. Jansen" born in the same month, causing EM to overfit.
-
-Fix: use only the soundex_initial_year key (AND-style: surname phonetic +
-first_initial + birth_year).  A full first name's initial always matches an
-abbreviated initial, so true-match recall is preserved while same-month false
-pairs are eliminated.
+HKS/SIS records contain ~11-17% initials in voornamen.  The year_month DOB
+blocking key generates huge numbers of false candidate pairs when combined with
+abbreviated first names — any "J. Jansen" born in the same month matches every
+other "J. Jansen".  Fix: use only soundex_initial_year blocking (drop year_month).
+A full first name's initial always matches an abbreviated initial, so true-match
+recall is preserved.
 """
 
 import sys
@@ -25,61 +20,59 @@ try:
 except ImportError:
     jellyfish = None
 
+_SURNAME_COL    = "achternaam"
+_FIRSTNAME_COL  = "voornamen"
+_DOB_COL        = "geboortedatum"
+_POSTCODE_COL   = "postcode"
+_WOONPLAATS_COL = "woonplaats"
 
-def build(toml_data, dfs, link_type="dedupe_only"):
-    """Build splink comparisons and blocking rules, using only soundex_initial_year blocking."""
-    mappings = toml_data.get("field_mappings", [])
-    if not mappings or not any(m.get("comparison_type") for m in mappings):
-        return None, None, None, None
 
+def build(dfs, link_type="dedupe_only"):
+    """Return (comparisons, blocking_rules, em_col, surname_col, renames).
+
+    Uses only soundex_initial_year blocking — no year_month key.
+    """
     import splink.comparison_library as cl
     from splink import block_on
 
-    surname_col   = next((m["a_field"] for m in mappings if m.get("role") == "surname"), None)
-    firstname_col = next((m["a_field"] for m in mappings if m.get("role") == "firstname"), None)
-    dob_col       = next((m["a_field"] for m in mappings if m.get("role") == "dob"), None)
+    ref_df = dfs[0]
 
     for df in dfs:
-        if surname_col and firstname_col and dob_col:
-            if all(c in df.columns for c in [surname_col, firstname_col, dob_col]):
-                if jellyfish:
-                    df["_bk_soundex_init_year"] = (
-                        df[surname_col].apply(lambda x: jellyfish.soundex(x) if x else "")
-                        + ":" + df[firstname_col].str[:1].fillna("")
-                        + ":" + df[dob_col].str[:4].fillna("")
-                    )
-                else:
-                    df["_bk_soundex_init_year"] = (
-                        df[surname_col].str[:4].fillna("")
-                        + ":" + df[firstname_col].str[:1].fillna("")
-                        + ":" + df[dob_col].str[:4].fillna("")
-                    )
+        if all(c in df.columns for c in [_SURNAME_COL, _FIRSTNAME_COL, _DOB_COL]):
+            if jellyfish:
+                df["_bk_soundex_init_year"] = (
+                    df[_SURNAME_COL].apply(lambda x: jellyfish.soundex(x) if x else "")
+                    + ":" + df[_FIRSTNAME_COL].str[:1].fillna("")
+                    + ":" + df[_DOB_COL].str[:4].fillna("")
+                )
+            else:
+                df["_bk_soundex_init_year"] = (
+                    df[_SURNAME_COL].str[:4].fillna("")
+                    + ":" + df[_FIRSTNAME_COL].str[:1].fillna("")
+                    + ":" + df[_DOB_COL].str[:4].fillna("")
+                )
 
-    ref_df = dfs[0]
     comparisons = []
-    for m in mappings:
-        col   = m.get("a_field", "")
-        ctype = m.get("comparison_type", "exact")
-        if col not in ref_df.columns:
-            continue
-        if ctype == "jaro_winkler":
+    for col in [_FIRSTNAME_COL, _SURNAME_COL]:
+        if col in ref_df.columns:
             try:
                 comparisons.append(cl.JaroWinklerAtThresholds(col, [0.88, 0.7]))
             except AttributeError:
                 comparisons.append(cl.LevenshteinAtThresholds(col, [1, 2, 3]))
-        elif ctype == "date":
-            comparisons.append(cl.ExactMatch(col))
-        else:
+    for col in [_DOB_COL, _POSTCODE_COL, _WOONPLAATS_COL]:
+        if col in ref_df.columns:
             comparisons.append(cl.ExactMatch(col))
 
-    # Only soundex_initial_year — drop year_month to cut down false candidates.
+    if not comparisons:
+        return None, None, None, None, {}
+
     blocking_rules = []
     if "_bk_soundex_init_year" in ref_df.columns:
         blocking_rules.append(block_on("_bk_soundex_init_year"))
+    if not blocking_rules:
+        blocking_rules = [block_on(_FIRSTNAME_COL)] if _FIRSTNAME_COL in ref_df.columns else []
 
-    if not blocking_rules and mappings:
-        first_col = mappings[0].get("a_field")
-        if first_col and first_col in ref_df.columns:
-            blocking_rules = [block_on(first_col)]
+    em_col      = _FIRSTNAME_COL if _FIRSTNAME_COL in ref_df.columns else None
+    surname_col = _SURNAME_COL   if _SURNAME_COL   in ref_df.columns else None
 
-    return comparisons, blocking_rules, firstname_col, surname_col
+    return comparisons, blocking_rules, em_col, surname_col, {}

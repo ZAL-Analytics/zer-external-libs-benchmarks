@@ -1,7 +1,8 @@
 """Per-scenario splink accuracy strategies.
 
-Each module exposes a ``build(toml_data, dfs, link_type)`` function that
-returns ``(comparisons, blocking_rules, em_col, surname_col)``.
+Each module exposes a ``build(dfs, link_type)`` function that returns
+``(comparisons, blocking_rules, em_col, surname_col, renames)``.
+If comparisons is None, the caller falls back to build_fallback_comparisons().
 
 To add a new strategy:
 1. Create ``strategies/<dataset_name>.py`` with a ``build()`` function.
@@ -23,7 +24,7 @@ def strategy_for(dataset_name: str):
     """Return the build function for ``dataset_name``.
 
     The returned callable has signature
-    ``build(toml_data, dfs, link_type) -> (comparisons, blocking_rules, em_col, surname_col)``.
+    ``build(dfs, link_type) -> (comparisons, blocking_rules, em_col, surname_col, renames)``.
     """
     strategies = {
         "brp_dedupe":                  _brp_dedupe.build,

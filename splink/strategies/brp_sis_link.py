@@ -1,10 +1,7 @@
-"""Splink accuracy strategy for brp_sis/link.
+"""Splink accuracy strategy for brp_sis/link — delegates to brp_hks_link.
 
-Same root cause as brp_hks/link: SIS records contain ~17 % initials in
-voornamen, and the year_month blocking key generates too many false candidate
-pairs.  See brp_hks_link.py for a full analysis.
-
-Fix: use only soundex_initial_year blocking (drop year_month).
+SIS records contain ~17% initials in voornamen — same root cause as HKS.
+See brp_hks_link.py for a full explanation.
 """
 
 from .brp_hks_link import build

@@ -1,10 +1,9 @@
-"""Splink accuracy strategy for kvk/dedupe.
+"""Splink accuracy strategy for kvk/dedupe — delegates to brp_dedupe.
 
-KvK company-contact records include postcode, woonplaats, and business
-identifiers — no initials issue.  Default blocking is well-calibrated.
-Starting point: delegates to default.  Add overrides here as needed.
+KvK company-contact records use the same BRP field names (voornamen, achternaam,
+geboortedatum, postcode) so the BRP blocking/comparison rules apply directly.
 """
 
-from .default import build
+from .brp_dedupe import build
 
 __all__ = ["build"]

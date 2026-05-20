@@ -74,50 +74,58 @@ All scripts accept an optional `--scenario <slug>` argument. When supplied it:
 - selects the named entry from `strategies/` instead of auto-detecting from the file path
 - uses the slug as `dataset_name` in output file names and JSON metadata
 
+When `--scenario` is omitted, the script derives the name from the path as
+`<dataset>_<mode>` (e.g. `data/benchmarks/brp/dedupe/source.csv` → `brp_dedupe`).
+
 ```bash
 cd benchmarks/splink
 source .venv/bin/activate   # if using a venv
 
 # Dedup
 python3 dedupe/run.py \
-    --dataset data/benchmarks/brp_small/brp_persons.csv \
-    --ground-truth data/benchmarks/brp_small/ground_truth_pairs.csv \
+    --dataset data/benchmarks/brp/dedupe/source.csv \
+    --ground-truth data/benchmarks/brp/dedupe/ground_truth.csv \
     --out bench_results/
 
 # Dedup with explicit scenario (overrides path-based naming)
 python3 dedupe/run.py \
-    --dataset data/benchmarks/brp_small/brp_persons.csv \
-    --ground-truth data/benchmarks/brp_small/ground_truth_pairs.csv \
+    --dataset data/benchmarks/brp/dedupe/source.csv \
+    --ground-truth data/benchmarks/brp/dedupe/ground_truth.csv \
     --scenario brp_dedupe \
     --out bench_results/
 
 # Link-only (two CSV files, pass --dataset twice)
 python3 link_only/run.py \
-    --dataset data/benchmarks/brp_small/brp_persons.csv \
-    --dataset data/benchmarks/sis/sis_persons.csv \
+    --dataset data/benchmarks/brp/link/source_a.csv \
+    --dataset data/benchmarks/brp/link/source_b.csv \
+    --ground-truth data/benchmarks/brp/link/ground_truth.csv \
     --out bench_results/
 
 # Link-and-dedupe (two CSV files)
 python3 link_and_dedupe/run.py \
-    --dataset data/benchmarks/brp_small/brp_persons.csv \
-    --dataset data/benchmarks/sis/sis_persons.csv \
+    --dataset data/benchmarks/brp/link_and_dedupe/source_a.csv \
+    --dataset data/benchmarks/brp/link_and_dedupe/source_b.csv \
+    --ground-truth data/benchmarks/brp/link_and_dedupe/ground_truth.csv \
     --out bench_results/
 
 # Throughput (single dataset, capped at --max-records; default 50 000)
 python3 throughput/run.py \
-    --dataset data/benchmarks/brp_small/brp_persons.csv \
+    --dataset data/benchmarks/brp/dedupe/source.csv \
     --max-records 50000 \
     --out bench_results/
 ```
 
 ## Input CSV format
 
-The scripts use a two-tier strategy for building splink comparisons and blocking rules:
+Each `run.py` resolves comparisons and blocking rules in two steps:
 
-1. **TOML-driven (preferred)**: if `data/benchmarks/<dataset>/mapping.toml` contains
-   `comparison_type` annotations, `strategies/` picks the matching per-scenario module which calls
-   `utils.build_from_mapping()` to build exact comparisons and blocking rules from the TOML.
-2. **Heuristic fallback**: when no TOML annotations are found, columns are auto-detected by keyword:
+1. **Strategy module (preferred)**: `strategies.strategy_for(dataset_name)` returns the registered
+   `build()` function for the scenario. Each strategy module explicitly defines comparisons and
+   blocking rules for its schema (e.g. `brp_dedupe.py` uses JaroWinkler on BRP name fields with
+   soundex + year-month blocking keys).
+2. **Heuristic fallback**: when the strategy returns `(None, …)` (i.e. no matching slug and
+   `default.py` is used), comparisons and blocking rules are built automatically from column names
+   via `utils.build_fallback_comparisons()`:
 
 | Field kind | Keywords matched (case-insensitive) |
 |---|---|
@@ -189,11 +197,12 @@ raw: { stages, throughput, memory_mb }   # per-stage breakdowns for detailed ana
 Per-scenario splink configurations live in `strategies/`. Each module exposes a `build()` function:
 
 ```python
-def build(toml_data, dfs, link_type) -> (comparisons, blocking_rules, em_col, surname_col)
+def build(dfs, link_type) -> (comparisons, blocking_rules, em_col, surname_col, renames)
 ```
 
 The `strategies/__init__.py` registry maps scenario slugs to their `build` function. When no slug matches,
-`strategies/default.py` is used, which delegates to `utils.build_from_mapping()`.
+`strategies/default.py` is used, which returns `(None, None, None, None, {})` to trigger the heuristic
+fallback in the calling `run.py`.
 
 Currently registered scenarios:
 
@@ -218,7 +227,7 @@ Helper code is shared across all `run.py` scripts via three modules:
 | Module | Location | Contents |
 |---|---|---|
 | `bench_metrics` | `benchmarks/utils/bench_metrics.py` | `norm_id`, `avg_precision`, `best_threshold_metrics`, `blocking_recall`, `write_scored_pairs_csv`, `load_scored_pairs_csv` |
-| `utils` | `benchmarks/splink/utils.py` | `load_toml`, `build_from_mapping`, `add_blocking_keys` |
+| `utils` | `benchmarks/splink/utils.py` | `add_blocking_keys`, `build_fallback_comparisons`, `write_summary_csv`, `run_splink_benchmark` |
 | `strategies` | `benchmarks/splink/strategies/` | Per-scenario `build()` functions; see [strategies/README.md](strategies/README.md) |
 
 Both `bench_metrics` and `utils` are inserted into `sys.path` at import time using
