@@ -17,11 +17,13 @@ try:
 except ImportError:
     jellyfish = None
 
-_SURNAME_COL    = "achternaam"
-_FIRSTNAME_COL  = "voornamen"
-_DOB_COL        = "geboortedatum"
-_POSTCODE_COL   = "postcode"
-_WOONPLAATS_COL = "woonplaats"
+_SURNAME_COL       = "achternaam"
+_FIRSTNAME_COL     = "voornamen"
+_DOB_COL           = "geboortedatum"
+_POSTCODE_COL      = "postcode"
+_WOONPLAATS_COL    = "woonplaats"
+_GEBOORTELAND_COL  = "geboorteland"
+_NATIONALITEIT_COL = "nationaliteit"
 
 
 def build(dfs, link_type="dedupe_only"):
@@ -55,7 +57,7 @@ def build(dfs, link_type="dedupe_only"):
                 comparisons.append(cl.JaroWinklerAtThresholds(col, [0.88, 0.7]))
             except AttributeError:
                 comparisons.append(cl.LevenshteinAtThresholds(col, [1, 2, 3]))
-    for col in [_DOB_COL, _POSTCODE_COL, _WOONPLAATS_COL]:
+    for col in [_DOB_COL, _POSTCODE_COL, _WOONPLAATS_COL, _GEBOORTELAND_COL, _NATIONALITEIT_COL]:
         if col in ref_df.columns:
             comparisons.append(cl.ExactMatch(col))
 

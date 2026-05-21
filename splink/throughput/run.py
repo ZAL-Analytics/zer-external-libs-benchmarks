@@ -10,32 +10,22 @@ Writes *_benchmark.json (zer throughput schema) and *_summary.csv (compare.rs co
 import argparse
 import csv
 import json
+import os
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import psutil
+
+_PROCESS = psutil.Process(os.getpid())
+
 
 def _read_rss_mb():
     try:
-        with open("/proc/self/status") as f:
-            for line in f:
-                if line.startswith("VmRSS:"):
-                    return round(int(line.split()[1]) / 1024.0, 1)
+        return round(_PROCESS.memory_info().rss / 1024 / 1024, 1)
     except Exception:
-        pass
-    return None
-
-
-def _read_peak_mb():
-    try:
-        with open("/proc/self/status") as f:
-            for line in f:
-                if line.startswith("VmHWM:"):
-                    return round(int(line.split()[1]) / 1024.0, 1)
-    except Exception:
-        pass
-    return None
+        return None
 
 
 def main():
@@ -127,7 +117,7 @@ def main():
     all_pairs = linker.inference.predict(threshold_match_probability=0.0).as_pandas_dataframe()
     predict_ms = int((time.monotonic() - t2) * 1000)
     mem_after_predict = _read_rss_mb()
-    mem_peak = _read_peak_mb()
+    mem_peak = max(v for v in (mem_after_load, mem_after_train, mem_after_predict) if v is not None) or None
 
     total_ms        = load_ms + u_sample_ms + train_ms + predict_ms
     candidate_pairs = len(all_pairs)

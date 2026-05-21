@@ -1,3 +1,4 @@
 splink>=4.0.0
 pandas>=2.0.0
 jellyfish>=0.9
+psutil>=5.9

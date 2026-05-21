@@ -241,6 +241,12 @@ def _load_throughput_record(data: dict, path: str) -> dict:
     raw_mem    = raw.get("memory_mb", {}) if raw else {}
     mem_detail = raw_mem if raw_mem else mem
 
+    # Fall back to max of stage readings when no explicit peak is provided (e.g. zer)
+    if mem_peak is None and raw_mem:
+        numeric_vals = [v for v in raw_mem.values() if isinstance(v, (int, float)) and v > 0]
+        if numeric_vals:
+            mem_peak = max(numeric_vals)
+
     bands = data.get("match_bands", {})
     rec = {
         "run_id":            data.get("run_id", ""),
@@ -926,7 +932,7 @@ def _plot_memory_timeline(rec: dict, lib_out_dir: str) -> None:
     plt.close(fig)
 
 
-def _plot_throughput_comparison_bars(thr: list, out_dir: str) -> None:
+def _plot_throughput_comparison_bars(thr: list, out_dir: str, title_suffix: str = "") -> None:
     """Multi-library side-by-side comparison: pipeline time, throughput, peak memory."""
     libraries = [r["library"] for r in thr]
     xs        = list(range(len(libraries)))
@@ -944,8 +950,12 @@ def _plot_throughput_comparison_bars(thr: list, out_dir: str) -> None:
         ax.set_ylabel(ylabel)
         ax.set_title(title)
 
+    suptitle = "zer-bench  ·  throughput comparison"
+    if title_suffix:
+        suptitle = f"{suptitle}  ·  {title_suffix}"
+
     fig, axes = plt.subplots(1, 3, figsize=(14, 5.0), squeeze=False)
-    fig.suptitle("zer-bench  ·  throughput comparison", fontsize=11)
+    fig.suptitle(suptitle, fontsize=11)
 
     _bar_panel(axes[0][0],
                [r.get("total_ms") or 0 for r in thr],
@@ -967,18 +977,91 @@ def _plot_throughput_comparison_bars(thr: list, out_dir: str) -> None:
     plt.close(fig)
 
 
+def _plot_throughput_grid(thr: list, datasets: list, out_dir: str) -> None:
+    """Multi-scenario grid: 3 metric rows × n_scenario columns.
+
+    Each column is one scenario (titled at the top); each row is one metric
+    (pipeline time, throughput, peak memory) with its own y-axis and raw values,
+    mirroring the layout of the per-scenario _plot_throughput_comparison_bars.
+    """
+    libraries = sorted({r["library"] for r in thr})
+    n_cols    = len(datasets)   # one column per scenario
+
+    # (row title, y-label, value extractor, bar annotation formatter)
+    metric_rows = [
+        ("pipeline time (ms)",    "ms",        lambda r: r.get("total_ms") or 0,              lambda v: f"{int(v):,} ms"),
+        ("throughput (M pairs/s)", "M pairs/s", lambda r: (r.get("pairs_per_s") or 0) / 1e6,  lambda v: f"{v:.2f} M"),
+        ("peak memory (MB)",       "MB",        lambda r: r.get("mem_peak_mb") or 0,           lambda v: f"{v:.0f} MB"),
+    ]
+    n_rows = len(metric_rows)
+
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(5.5 * n_cols, 4.0 * n_rows + 0.8),
+        squeeze=False,
+    )
+    fig.suptitle("zer-bench  ·  throughput comparison", fontsize=13, fontweight="bold")
+
+    for d_idx, dataset in enumerate(datasets):
+        grp      = [r for r in thr if r["_group"] == dataset]
+        grp_libs = [r["library"] for r in grp]
+        xs       = list(range(len(grp)))
+        colors   = [_color(lib, libraries) for lib in grp_libs]
+        borders  = [_border_color(lib, libraries) for lib in grp_libs]
+
+        for m_idx, (row_title, ylabel, val_fn, label_fn) in enumerate(metric_rows):
+            ax   = axes[m_idx][d_idx]
+            vals = [val_fn(r) for r in grp]
+
+            ax.bar(xs, vals, color=colors, edgecolor=borders, linewidth=1.0, width=0.55)
+            max_v = max(vals, default=1) or 1
+            for xi, val in zip(xs, vals):
+                ax.text(xi, val + max_v * 0.02, label_fn(val),
+                        ha="center", va="bottom", fontsize=7.5)
+            ax.set_xticks(xs)
+            ax.set_xticklabels(grp_libs, rotation=20, ha="right")
+            ax.set_ylabel(ylabel)
+
+            # Scenario name as column header on the top row only
+            if m_idx == 0:
+                ax.set_title(dataset, fontsize=10)
+            # Metric label on the left column only
+            if d_idx == 0:
+                ax.set_ylabel(f"{row_title}\n{ylabel}")
+
+    fig.tight_layout(pad=1.5)
+    _save_fig(fig, out_dir, "throughput_comparison")
+    plt.close(fig)
+
+
 def plot_throughput(records: list, out_dir: str) -> None:
     thr = [r for r in records if r["mode"] == "throughput"]
     if not thr:
         return
 
-    if len(thr) > 1:
+    datasets    = sorted({r["_group"] for r in thr})
+    n_datasets  = len(datasets)
+
+    if n_datasets > 1:
+        # Multi-scenario: emit one overview grid covering all scenarios.
+        _plot_throughput_grid(thr, datasets, out_dir)
+    elif len(thr) > 1:
+        # Single scenario, multiple libraries: flat comparison bars.
         _plot_throughput_comparison_bars(thr, out_dir)
 
-    for rec in thr:
-        lib_dir = os.path.join(out_dir, rec["library"])
-        _plot_stage_pie(rec, lib_dir)          # skipped automatically if < 2 stages
-        _plot_memory_timeline(rec, lib_dir)
+    for dataset in datasets:
+        grp     = [r for r in thr if r["_group"] == dataset]
+        # Each scenario lives in its own subdirectory when there are multiple scenarios.
+        grp_dir = os.path.join(out_dir, dataset) if n_datasets > 1 else out_dir
+
+        if n_datasets > 1 and len(grp) > 1:
+            # Per-scenario detail comparison (in addition to the overview grid).
+            _plot_throughput_comparison_bars(grp, grp_dir, title_suffix=dataset)
+
+        for rec in grp:
+            lib_dir = os.path.join(grp_dir, rec["library"])
+            _plot_stage_pie(rec, lib_dir)          # skipped automatically if < 2 stages
+            _plot_memory_timeline(rec, lib_dir)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
