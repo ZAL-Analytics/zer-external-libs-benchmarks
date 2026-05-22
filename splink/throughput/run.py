@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""splink throughput benchmark — measures load / train / predict stage latencies.
+"""splink throughput benchmark,measures load / train / predict stage latencies.
 
 Usage:
     python run.py --dataset <csv_path> [--scenario <slug>] --out <dir>

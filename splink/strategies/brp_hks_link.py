@@ -2,7 +2,7 @@
 
 HKS/SIS records contain ~11-17% initials in voornamen.  The year_month DOB
 blocking key generates huge numbers of false candidate pairs when combined with
-abbreviated first names — any "J. Jansen" born in the same month matches every
+abbreviated first names,any "J. Jansen" born in the same month matches every
 other "J. Jansen".  Fix: use only soundex_initial_year blocking (drop year_month).
 A full first name's initial always matches an abbreviated initial, so true-match
 recall is preserved.
@@ -30,7 +30,7 @@ _WOONPLAATS_COL = "woonplaats"
 def build(dfs, link_type="dedupe_only"):
     """Return (comparisons, blocking_rules, em_col, surname_col, renames).
 
-    Uses only soundex_initial_year blocking — no year_month key.
+    Uses only soundex_initial_year blocking,no year_month key.
     """
     import splink.comparison_library as cl
     from splink import block_on

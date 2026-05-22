@@ -70,7 +70,7 @@ def library_color(name, palette_name="tab10"):
     return _KNOWN_BORDER.get(name) or plt.get_cmap(palette_name)(hash(name) % 10)
 _MARKERS = ["o", "s", "^", "D", "v", "P", "X", "*", "h", "<"]
 
-# Stage palette — fixed per concept so the same stage always has the same color across
+# Stage palette,fixed per concept so the same stage always has the same color across
 # all libraries and plot types. "total" is also used as the single-class color for
 # external libs (splink, dedupe) that expose only one pipeline stage.
 _STAGE_PALETTE = {
@@ -86,7 +86,7 @@ _STAGE_PALETTE = {
     "load":     "#E8E8E8",  # very light gray (init, not part of pipeline)
     "train":    "#E8E8E8",
     "index":    "#E8E8E8",
-    "setup":    "#F5E6C8",  # pastel amber — u-sampling setup (splink only, excluded from total)
+    "setup":    "#F5E6C8",  # pastel amber,u-sampling setup (splink only, excluded from total)
 }
 _STAGE_BORDER = {
     "block":    "#4C72B0",
@@ -553,7 +553,7 @@ def plot_pr_curves(records: list, out_dir: str) -> None:
             marker = _marker(lib, libraries)
             pr_auc = row.get("pr_auc")
             label  = f"{lib} (AP={pr_auc:.3f})" if pr_auc is not None else lib
-            # Downsample for SVG/PDF compactness — keep at most 2000 points
+            # Downsample for SVG/PDF compactness,keep at most 2000 points
             step = max(1, len(recalls) // 2000)
             ax.plot(recalls[::step], precisions[::step],
                     color=border, linewidth=1.4,

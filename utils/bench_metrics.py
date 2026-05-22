@@ -100,7 +100,7 @@ def blocking_recall(candidate_pair_ids, gt_pairs):
 def write_scored_pairs_csv(path, scores, labels):
     """Write (score, is_match) pairs to a CSV file sorted by score descending.
 
-    Removes the 500K truncation — CSV can hold millions of rows without the
+    Removes the 500K truncation,CSV can hold millions of rows without the
     memory and load-time cost of embedding them in a JSON file.
     """
     path = Path(path)

@@ -12,7 +12,7 @@ Accuracy metrics shared by every `run.py` script (splink, etc.).
 | `avg_precision(labels, scores, n_total_pos)` | `float \| None` | Area under the Precision–Recall curve (Average Precision). Pass `n_total_pos=len(gt_pairs)` to include blocking false negatives in the recall denominator. |
 | `best_threshold_metrics(labels, scores, n_total_pos)` | `(f1, precision, recall, threshold, tp, fp, fn)` | Sweep all score thresholds and return the one that maximises F1. Pass `n_total_pos` to make recall comparable across systems with different blocking recall. |
 | `blocking_recall(candidate_pair_ids, gt_pairs)` | `float \| None` | Fraction of ground-truth pairs that appear in the candidate set; reveals the blocking ceiling before scoring. |
-| `write_scored_pairs_csv(path, scores, labels)` | — | Write `(score, is_match)` pairs to CSV, sorted by score descending. No row limit — avoids embedding large arrays in JSON. |
+| `write_scored_pairs_csv(path, scores, labels)` |,| Write `(score, is_match)` pairs to CSV, sorted by score descending. No row limit,avoids embedding large arrays in JSON. |
 | `load_scored_pairs_csv(path)` | `list[dict]` | Load a `scored_pairs` CSV back as `[{"score": float, "is_match": bool}, ...]`. |
 
 All accuracy metric functions accept `labels` and `scores` as parallel lists.

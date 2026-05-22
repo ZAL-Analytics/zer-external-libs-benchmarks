@@ -180,7 +180,7 @@ The throughput `_benchmark.json` uses a different schema focused on stage timing
 ```
 library, mode, dataset, run_id, timestamp, backend,
 total_records, candidate_pairs,
-setup_ms,            # u-sampling time — no zer equivalent, excluded from pipeline total
+setup_ms,            # u-sampling time,no zer equivalent, excluded from pipeline total
 pipeline: {
     compare_ms,      # blocking + compare + score combined (single DuckDB pass)
     em_ms,           # EM parameter estimation only

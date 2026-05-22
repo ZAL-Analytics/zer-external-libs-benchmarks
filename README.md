@@ -28,9 +28,9 @@ benchmarks/
 
 All benchmark scripts share the same output schema and metric functions from `utils/`:
 
-- **`bench_metrics.py`** — `best_threshold_metrics`, `avg_precision`, `blocking_recall`,
+- **`bench_metrics.py`**,`best_threshold_metrics`, `avg_precision`, `blocking_recall`,
   `write_scored_pairs_csv`, `load_scored_pairs_csv`, `norm_id`
-- **`plot_results.py`** — renders accuracy and throughput comparison plots from `*_benchmark.json` files
+- **`plot_results.py`**,renders accuracy and throughput comparison plots from `*_benchmark.json` files
 
 See [utils/README.md](utils/README.md) for full API documentation.
 
